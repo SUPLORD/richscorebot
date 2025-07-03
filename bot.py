@@ -1,28 +1,29 @@
 import os
-from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram import Update
+from telegram.ext import (
+    ApplicationBuilder, CommandHandler, ContextTypes
+)
 
+# 📌 Получаем токен из переменной окружения
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# Команда /start
+# 🚀 Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [["💰 Деньги", "🏠 Квартира"], ["🚘 Машина", "✈️ Путешествие"], ["💼 Бизнес", "📱 Айфон"]]
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    await update.message.reply_text(
-        "Привет! Это RICHSCORE 💸\n\n"
-        "Выбери свою цель, а я помогу рассчитать путь 👇",
-        reply_markup=reply_markup
-    )
+    await update.message.reply_text("Привет! Я RICHSCORE. Готов к раскладу? 💸")
 
-# Обработка выбранной цели
-async def handle_goal(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    goal = update.message.text
-    await update.message.reply_text(f"🔥 Цель принята: {goal}\n\n💬 Сколько ты готов откладывать в месяц?")
+# 🎯 Пример команды /цель
+async def goal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🛠 Сейчас добавим твою цель...")
 
-# Запуск приложения
-app = ApplicationBuilder().token(BOT_TOKEN).build()
-app.add_handler(CommandHandler("start", start))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_goal))
+# ⚙️ Настройка бота
+def main():
+    print("🚀 БОТ ЗАПУСКАЕТСЯ... RICHSCORE ждёт тебя.")
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-print("🚀 БОТ ЗАПУСКАЕТСЯ... RICHSCORE ждёт тебя.")
-app.run_polling()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("цель", goal))
+
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
