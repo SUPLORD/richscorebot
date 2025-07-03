@@ -1,25 +1,19 @@
 import os
 from telegram import Update
-from telegram.ext import (
-    ApplicationBuilder, CommandHandler, ContextTypes
-)
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# 📌 Получаем токен из переменной окружения
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+TOKEN = os.getenv("BOT_TOKEN")
 
-# 🚀 Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Привет! Я RICHSCORE. Готов к раскладу? 💸")
+    await update.message.reply_text("Привет! Я RICHSCORE. Помогу тебе с финансами. Напиши /цель")
 
-# 🎯 Пример команды /цель
 async def goal(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🛠 Сейчас добавим твою цель...")
+    await update.message.reply_text("Отлично! Напиши свою цель, например: Купить квартиру за 10 000 000 ₽")
 
-# ⚙️ Настройка бота
 def main():
     print("🚀 БОТ ЗАПУСКАЕТСЯ... RICHSCORE ждёт тебя.")
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-
+    app = ApplicationBuilder().token(TOKEN).build()
+    
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("цель", goal))
 
