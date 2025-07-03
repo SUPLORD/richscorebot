@@ -1,110 +1,132 @@
+import os
 from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
-from reportlab.pdfgen import canvas
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    ConversationHandler,
+    ContextTypes,
+    filters,
+)
 
-# Этапы разговора
-CHOOSING_GOAL, ASK_REASON, ASK_AMOUNT, ASK_MONTHLY = range(4)
+# Получаем токен из переменных окружения
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
-# Память
-user_data = {}
+# Этапы диалога
+(
+    CHOOSING_NAME,
+    CHOOSING_GOAL,
+    ASK_AMOUNT,
+    ASK_PAYMENT,
+    SHOW_RESULT,
+) = range(5)
 
 # Список целей
-GOALS = ["📱 Айфон", "🚗 Машина", "🏠 Квартира", "🏢 Пентхаус", "🌴 Путешествие", "💼 Собственный бизнес"]
+GOALS = [
+    "💼 Бизнес",
+    "🏠 Квартира",
+    "🚘 Машина",
+    "🌴 Путешествие",
+    "📱 Айфон",
+    "💻 Компьютер",
+    "💰 Подушка безопасности",
+]
 
+# Хранилище данных
+user_data = {}
+
+# Старт
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Привет! Я RICHSCORE. Я не брокер и не ЦБ — я честный финансовый собеседник.\n\n"
-        "Давай разложим твою мечту по полочкам. Выбери цель:",
-        reply_markup=ReplyKeyboardMarkup([GOALS], one_time_keyboard=True, resize_keyboard=True)
+        "Привет! Я RICHSCORE, твой личный финансовый бот 💸\n\nКак тебя зовут?"
+    )
+    return CHOOSING_NAME
+
+# Имя
+async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_data["name"] = update.message.text
+    keyboard = [[g] for g in GOALS]
+    await update.message.reply_text(
+        f"Отлично, {user_data['name']}!\n\nТеперь выбери цель:",
+        reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True),
     )
     return CHOOSING_GOAL
 
-async def choose_goal(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    goal = update.message.text
-    user_data[update.effective_user.id] = {"goal": goal}
-    await update.message.reply_text(
-        f"Хороший выбор — {goal}.\nТы хочешь это ради кайфа или по необходимости?"
-    )
-    return ASK_REASON
-
-async def ask_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    reason = update.message.text
-    user_data[update.effective_user.id]["reason"] = reason
-    await update.message.reply_text("Сколько тебе нужно на это в рублях?")
+# Цель
+async def get_goal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_data["goal"] = update.message.text
+    await update.message.reply_text("Сколько стоит твоя цель? (в рублях, только число)")
     return ASK_AMOUNT
 
-async def ask_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# Сумма цели
+async def get_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        amount = float(update.message.text.replace(" ", ""))
-    except:
-        await update.message.reply_text("Напиши сумму числом. Например: 500000")
+        user_data["amount"] = int(update.message.text.replace(" ", ""))
+        await update.message.reply_text("Сколько ты можешь откладывать в месяц? (в рублях)")
+        return ASK_PAYMENT
+    except ValueError:
+        await update.message.reply_text("Введи только число, без лишних символов.")
         return ASK_AMOUNT
-    user_data[update.effective_user.id]["amount"] = amount
-    await update.message.reply_text("Сколько ты можешь откладывать в месяц?")
-    return ASK_MONTHLY
 
-async def ask_monthly(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# Ежемесячный взнос и расчёт
+async def get_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        monthly = float(update.message.text.replace(" ", ""))
-    except:
-        await update.message.reply_text("Пожалуйста, напиши число. Например: 10000")
-        return ASK_MONTHLY
+        payment = int(update.message.text.replace(" ", ""))
+        user_data["payment"] = payment
 
-    data = user_data[update.effective_user.id]
-    data["monthly"] = monthly
-    r = 0.01  # 12% годовых / 12 месяцев
-    amount, pmt = data["amount"], data["monthly"]
+        goal = user_data["goal"]
+        amount = user_data["amount"]
+        rate = 0.15  # Доходность 15%
+        months = 0
+        total = 0
 
-    # Расчёт срока (в месяцах)
-    if pmt <= 0 or r <= 0:
-        months = 999
-    else:
-        from math import log, ceil
-        months = ceil(log((pmt + r * 0) / (pmt + r * 0 - r * amount)) / log(1 + r))
+        while total < amount and months < 1000:
+            total = total * (1 + rate / 12) + payment
+            months += 1
 
-    years = months // 12
-    months_left = months % 12
+        years = months // 12
+        rest_months = months % 12
 
-    data["years"], data["months_left"] = years, months_left
+        text = f"""📊 *ТВОЙ РАСКЛАД*
 
-    # Генерация PDF
-    filename = f"richscore_{update.effective_user.id}.pdf"
-    c = canvas.Canvas(filename)
-    c.setFont("Helvetica", 14)
-    c.drawString(100, 800, f"🎯 Цель: {data['goal']}")
-    c.drawString(100, 780, f"💭 Причина: {data['reason']}")
-    c.drawString(100, 760, f"💰 Сумма: {amount:,.0f} ₽")
-    c.drawString(100, 740, f"📦 Откладываем в месяц: {pmt:,.0f} ₽")
-    c.drawString(100, 720, f"📈 Доходность: 12% годовых")
-    c.drawString(100, 700, f"⏳ Срок: {years} лет и {months_left} месяцев")
-    c.drawString(100, 660, "⚠️ Это не финансовый совет, а дружеский расчёт.")
-    c.drawString(100, 640, "Я не ЦБ, но стараюсь быть честным 🤝")
-    c.save()
+🎯 Цель: {goal}
+💰 Сумма: {amount:,} ₽
+📦 Взнос: {payment:,} ₽ / мес
+📈 Доходность: 15% годовых
 
-    # Отправка PDF
-    await update.message.reply_document(open(filename, "rb"), filename="Твой_расклад_RICHSCORE.pdf")
+⏳ Примерный срок: {years} лет и {rest_months} мес
 
-    await update.message.reply_text("Если хочешь попробовать другую цель — набери /start.")
-    return ConversationHandler.END
+⚠️ Это не финсовет, а дружеский расчёт.
+Я не ЦБ, но стараюсь быть честным 😉
+"""
+        await update.message.reply_markdown(text)
+        await update.message.reply_text("Напиши /start — чтобы рассчитать новую цель.")
+        return ConversationHandler.END
 
+    except ValueError:
+        await update.message.reply_text("Введи только число, без лишнего.")
+        return ASK_PAYMENT
+
+# Отмена
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Окей, расклад отменён.")
+    await update.message.reply_text("Окей! Если передумаешь — напиши /start.")
     return ConversationHandler.END
 
-app = ApplicationBuilder().token("7572906236:AAE7kinfyi_1oIA6Kg4MpYNONBniqIATffc").build()
+# Основной запуск
+if __name__ == "__main__":
+    print("🚀 БОТ ЗАПУСКАЕТСЯ... RICHSCORE ждёт тебя.")
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-conv = ConversationHandler(
-    entry_points=[CommandHandler("start", start)],
-    states={
-        CHOOSING_GOAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, choose_goal)],
-        ASK_REASON: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_reason)],
-        ASK_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_amount)],
-        ASK_MONTHLY: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_monthly)],
-    },
-    fallbacks=[CommandHandler("cancel", cancel)],
-)
+    conv = ConversationHandler(
+        entry_points=[CommandHandler("start", start)],
+        states={
+            CHOOSING_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
+            CHOOSING_GOAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_goal)],
+            ASK_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_amount)],
+            ASK_PAYMENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_payment)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
 
-app.add_handler(conv)
-
-print("▶️ БОТ ЗАПУЩЕН... RICHSCORE ждёт тебя.")
-app.run_polling()
+    app.add_handler(conv)
+    app.run_polling()
